@@ -94,6 +94,30 @@ def test_no_feature_uses_future_sales_beyond_forecast_origin():
             f"feature {c} differs between full and truncated series -- possible leakage"
 
 
+def test_no_cross_series_leakage_in_rolling_features():
+    # Regression test for a real bug found while building Phase 10: the
+    # original implementation called .rolling() on a plain (already
+    # group-shifted) Series, which computes the window over GLOBAL row
+    # position rather than per-id -- letting a short/early series' rolling
+    # window reach backward into a DIFFERENT series' tail. Constructed so
+    # the two series have wildly different, easily distinguished values:
+    # if id B's early roll_mean_28 is ever non-NaN before B has enough of
+    # its OWN history, that's leakage.
+    dates = pd.date_range("2016-01-01", periods=40, freq="D")
+    df_a = pd.DataFrame({"id": "A", "item_id": "IA", "dept_id": "D", "cat_id": "C",
+                          "store_id": "S", "state_id": "CA", "date": dates,
+                          "sales": 1_000_000.0, "sell_price": 5.0})  # huge, obviously-distinct values
+    df_b = pd.DataFrame({"id": "B", "item_id": "IB", "dept_id": "D", "cat_id": "C",
+                          "store_id": "S", "state_id": "CA", "date": dates,
+                          "sales": 1.0, "sell_price": 5.0})
+    df = pd.concat([df_a, df_b], ignore_index=True)
+    out = add_features(df, horizon=28)
+    sub_b = out[out["id"] == "B"].sort_values("date").reset_index(drop=True)
+    early_rows = sub_b.iloc[:27]
+    assert early_rows["roll_mean_28"].isna().all(), \
+        "roll_mean_28 has non-NaN values before this series has any of its own history -- leakage"
+
+
 def test_snap_flag_uses_own_state_not_hardcoded_california():
     # Regression test for the hardcoded snap_CA bug found in the
     # prototype. Construct rows for all 3 states with DIFFERENT snap

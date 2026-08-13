@@ -81,9 +81,29 @@ def add_features(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
             df[f"lag_{lag}"] = g.shift(lag)
 
     for w in ROLL_WINDOWS:
-        shifted = g.shift(horizon)
-        df[f"roll_mean_{w}"] = shifted.rolling(w).mean().reset_index(level=0, drop=True)
-        df[f"roll_std_{w}"] = shifted.rolling(w).std().reset_index(level=0, drop=True)
+        # BUG FOUND while building the cold-start scenario for Phase 10:
+        # `g.shift(horizon)` is correctly group-aware (per-id), but the
+        # result is a plain Series, and calling `.rolling(w)` on THAT
+        # plain Series computes the window over GLOBAL row position, not
+        # per-id. For any id whose block is short enough (or right at the
+        # start of another id's block) relative to the window, the
+        # rolling window can reach backward across the id boundary and
+        # average in a COMPLETELY DIFFERENT SERIES' shifted sales values
+        # -- confirmed concretely: a cold-start series (88 retained rows)
+        # showed a "valid" roll_mean_28 of 0.0 at its very first row,
+        # which is only possible if the window pulled 28 non-null values
+        # from the tail of whatever full-history series precedes it in
+        # sorted order, since this series' own shift(horizon) can't
+        # produce a single valid value until local row `horizon`. This
+        # also silently affected the first ~27-34 days of EVERY series'
+        # history in every prior phase's data (a small fraction of rows,
+        # but real, unintended cross-series contamination) -- not just
+        # the cold-start scenario that happened to surface it. Fixed by
+        # grouping explicitly before rolling, not just before shifting.
+        df[f"roll_mean_{w}"] = (df.groupby("id")["sales"]
+                                 .transform(lambda s: s.shift(horizon).rolling(w).mean()))
+        df[f"roll_std_{w}"] = (df.groupby("id")["sales"]
+                                .transform(lambda s: s.shift(horizon).rolling(w).std()))
 
     df["dow"] = df["date"].dt.dayofweek
     df["day_of_year"] = df["date"].dt.dayofyear
