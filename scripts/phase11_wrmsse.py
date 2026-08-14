@@ -46,41 +46,37 @@ TEST_END = pd.Timestamp("2016-05-22")
 
 
 def seasonal_naive_wide(wide: np.ndarray, train_end_idx: int, horizon: int,
-                         dow: np.ndarray, n_periods: int = 4) -> np.ndarray:
+                         dow: np.ndarray, n_periods: int = 4, agg: str = "mean") -> np.ndarray:
     """
-    Vectorized seasonal-naive on a (series x day) array: predict[h] = mean
-    of the last n_periods TRAIN-period occurrences of that weekday.
-
-    First version of this function computed lookback indices as a fixed
-    offset (target - 7, -14, -21, -28) from each test day, which reaches
-    INTO the test period itself for h >= 7 (an IndexError caught this
-    immediately, but the deeper problem is it would have been leakage --
-    using later test days' own positions to inform earlier ones -- not
-    just a bounds bug). Fixed to match src/models/naive.py's actual
-    semantics: for a given weekday, always use the last n_periods
-    occurrences found WITHIN TRAIN, regardless of how far into the
-    horizon the target day is -- so every test day sharing a weekday
-    gets the same reference value, which is also simpler and correct.
-
-    dow: day-of-week array aligned to `wide`'s full column index space
-    (i.e. dow[train_end_idx + 1 + h] gives the correct weekday for
-    forecast step h), length must cover at least train_end_idx+1+horizon.
+    Same weekday-matching logic as Phase 11's version, but defaults to
+    MEDIAN rather than mean. This matters specifically for this phase:
+    mean is a linear operator, so a mean-based forecast is coherent by
+    construction (sum-of-means == mean-of-sums), which is exactly what
+    Phase 2 found and is what made the first run of THIS script show
+    IDENTICAL direct and bottom-up scores at every single level -- a
+    real result, but a degenerate one that can't answer Phase 0's actual
+    question (does reconciliation help or hurt ACCURACY, not just
+    coherence). Median doesn't distribute over sums, so switching to it
+    here -- for both the Level12 base forecast and the "direct" per-level
+    forecast -- lets bottom-up and direct genuinely diverge, the same fix
+    Phase 2 made for the same underlying reason.
     """
     n_series = wide.shape[0]
     train_dow = dow[:train_end_idx + 1]
-    weekday_means: Dict[int, np.ndarray] = {}
+    reduce_fn = np.median if agg == "median" else np.mean
+    weekday_vals: Dict[int, np.ndarray] = {}
     for wd in range(7):
         col_idxs = np.flatnonzero(train_dow == wd)
         last_n = col_idxs[-n_periods:] if len(col_idxs) > 0 else col_idxs
         if len(last_n) == 0:
-            weekday_means[wd] = wide[:, :train_end_idx + 1].mean(axis=1)  # fallback: overall train mean
+            weekday_vals[wd] = reduce_fn(wide[:, :train_end_idx + 1], axis=1)
         else:
-            weekday_means[wd] = wide[:, last_n].mean(axis=1)
+            weekday_vals[wd] = reduce_fn(wide[:, last_n], axis=1)
 
     preds = np.zeros((n_series, horizon))
     for h in range(horizon):
         target_dow = int(dow[train_end_idx + 1 + h])
-        preds[:, h] = weekday_means[target_dow]
+        preds[:, h] = weekday_vals[target_dow]
     return preds
 
 
