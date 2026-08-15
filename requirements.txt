@@ -4,7 +4,5 @@ scipy
 scikit-learn
 lightgbm
 statsmodels
-matplotlib
-seaborn
 pytest
 streamlit

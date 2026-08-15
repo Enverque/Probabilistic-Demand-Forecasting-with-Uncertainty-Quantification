@@ -1,0 +1,8 @@
+# Optional, heavy dependencies -- ONLY needed to rerun scripts/phase9_bayesian.py.
+# Not required for the rest of the pipeline (Phases 1-8, 10-19, or the dashboard).
+# Kept separate from requirements.txt deliberately: Phase 9 concluded this model
+# is NOT adopted for the project (non-convergent + computationally infeasible at
+# scale -- see docs/phase_notes/phase9.md), so most people reproducing this repo
+# don't need these installed at all.
+pymc
+arviz
