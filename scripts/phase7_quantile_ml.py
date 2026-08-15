@@ -30,6 +30,7 @@ from src.features.engineering import build_long_format, add_features, feature_co
 from src.models.quantile_ml import fit_quantiles, predict_quantiles, point_model  # noqa: E402
 from src.models.naive import seasonal_naive, moving_average  # noqa: E402
 from src.evaluation.metrics import wmape, bias, fva  # noqa: E402
+from src.evaluation.calibration import coverage_rate  # noqa: E402
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 RANDOM_STATE = 42
@@ -83,9 +84,9 @@ def main():
     def fit_predict_with_coverage(train, test):
         models = fit_quantiles(train, cols, "sales", QUANTILES, random_state=RANDOM_STATE)
         preds = predict_quantiles(models, test, cols)
-        covered = (test["sales"] >= preds[0.1]) & (test["sales"] <= preds[0.9])
+        covered = coverage_rate(test["sales"], preds[0.1], preds[0.9])
         coverage_rows.append({"window_test_start": test["date"].min(),
-                               "empirical_coverage_80pct_interval": covered.mean()})
+                               "empirical_coverage_80pct_interval": covered})
         return preds[0.5]
 
     t0 = time.time()

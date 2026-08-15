@@ -26,6 +26,7 @@ from src.forecasting.backtest import RollingOriginBacktester  # noqa: E402
 from src.forecasting.probabilistic import (  # noqa: E402
     generate_probabilistic_forecast, build_intervals, INTERVAL_DEFINITIONS,
 )
+from src.evaluation.calibration import coverage_rate  # noqa: E402
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 RANDOM_STATE = 42
@@ -71,8 +72,8 @@ def main():
         row = {"window_id": w.window_id, "test_start": w.test_start.date().isoformat(),
                "n_test": len(test)}
         for name in INTERVAL_DEFINITIONS:
-            covered = (test["sales"] >= intervals[f"{name}_lower"]) & (test["sales"] <= intervals[f"{name}_upper"])
-            row[f"coverage_{name}"] = covered.mean()
+            covered = coverage_rate(test["sales"], intervals[f"{name}_lower"], intervals[f"{name}_upper"])
+            row[f"coverage_{name}"] = covered
             row[f"mean_width_{name}"] = intervals[f"{name}_width"].mean()
         per_window_rows.append(row)
         all_actuals.append(test["sales"])
@@ -89,9 +90,9 @@ def main():
     nominal_levels = {"50%": 0.50, "80%": 0.80, "95%": 0.95}
     calibration_rows = []
     for name, nominal in nominal_levels.items():
-        covered = ((combined_actual >= combined_intervals[f"{name}_lower"])
-                   & (combined_actual <= combined_intervals[f"{name}_upper"]))
-        empirical = covered.mean()
+        covered = coverage_rate(combined_actual, combined_intervals[f"{name}_lower"],
+                                 combined_intervals[f"{name}_upper"])
+        empirical = covered
         mean_width = combined_intervals[f"{name}_width"].mean()
         gap = empirical - nominal
         calibration_rows.append({"interval": name, "nominal": nominal, "empirical": empirical,
