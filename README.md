@@ -4,7 +4,7 @@ A retail demand forecasting system for the M5 dataset (Walmart, 30,490
 item-store series) that predicts distributions, not just point values, and
 connects those distributions to an actual inventory decision.
 
-## Why point forecasts aren't enough
+## Why point forecasts are not enough
 A forecast of "542 units" doesn't tell an inventory planner how much
 safety stock to hold. This project measures, rather than assumes, how much
 better a predictive distribution serves that decision -- see
